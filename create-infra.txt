@@ -1,0 +1,132 @@
+!login first
+az login
+
+!get subscription id
+az account list --output table
+
+!create a resource group
+RG="TestRG1"
+az group create --name $RG --location canadaeast
+
+az group show --name $RG
+
+az group list
+
+!delete resource group
+az group delete -n $RG
+
+!lock resource group
+az lock create --lock-type CanNotDelete --resource-name myuniquestorage --resource-group TestRG1 --resource-type Microsoft.Storage/storageAccounts --name storagelock
+!unlock
+az lock delete --name storagelock --resource-group TestRG1 --resource-type Microsoft.Storage/storageAccounts --resource-name myuniquestorage
+
+!create virtual network
+NetV="TestVNet1"
+az network vnet create \
+--name $NetV \
+--resource-group $RG \
+--location canadaeast \
+--address-prefix 10.0.0.0/16 \
+--subnet-name FrontEnd \
+--subnet-prefix 10.0.0.0/24
+
+!list
+az network vnet list --query '[?name==`'$NetV'`].{Where:location,Name:name,Group:resourceGroup}' -o table
+
+
+!Create a subnet:
+az network vnet subnet create \
+--address-prefix 10.0.1.0/24 \
+--name BackEnd \
+--resource-group $RG \
+--vnet-name $NetV
+
+
+!query network
+az network vnet subnet list \
+-g $RG \
+--vnet-name $NetV \
+--query '[].{Name:name,CIDR:addressPrefix,Status:provisioningState}' \
+-o table
+
+!list network
+az network vnet list --query "[?contains(addressSpace.addressPrefixes, '10.0.0.0/16')]" -o table
+
+!delete network
+az network vnet delete --name $NetV --resource-group $RG
+
+!delete a subnet
+az network vnet subnet delete --name BackEnd --resource-group $RG --vnet-name $NetV
+                              							  
+!create public ip
+az network public-ip create \
+--name TestPIP \
+--resource-group $RG \
+--location canadaeast \
+--allocation-method Static	
+
+!delete public ip
+az network public-ip delete --name TestPIP --resource-group $RG
+
+!create a network resource-group
+nsg1="mynsg1"
+az network nsg create \
+    --resource-group $RG \
+    --name $nsg1
+	
+!delete nsg
+az network nsg delete --resource-group $RG --name $nsg1
+	
+!nsg rule create
+az network nsg rule create \
+    --resource-group $RG \
+    --nsg-name $nsg1 \
+    --name RuleSSH1 \
+    --protocol tcp \
+    --priority 1000 \
+    --destination-port-range 22 \
+    --access allow
+	
+!nsg rule delete
+az network nsg rule delete \
+    --resource-group $RG \
+    --nsg-name $nsg1 \
+    --name RuleSSH1 \
+
+!show nsg	
+az network nsg show --resource-group $RG --name $nsg1 -o table	
+
+!create vNic1
+az network nic create \
+    --resource-group $RG \
+    --name vNic1 \
+    --vnet-name $NetV \
+    --subnet FrontEnd \
+    --public-ip-address TestPIP \
+    --network-security-group $nsg1
+	
+!delete vNic1
+az network nic delete \
+    --resource-group $RG \
+    --name vNic1 \
+	
+
+!create vm
+az vm create \
+    --resource-group $RG \
+    --name rhel1 \
+    --location canadaeast \
+    --nics vNic1 \
+    --image RHEL \
+    --admin-username sanfe \
+    --ssh-key-value "ssh-rsa xxx-this-is-not-actual-yyy user@hostname3"
+
+
+!delete vm
+az vm delete --resource-group $RG --name rhel1 --yes
+	
+!see all RG 
+az resource list -g $RG -o table
+
+!delete RG THEN IT WILL DELETE ALL ABOVE RESOURCES
+az group delete --name $RG --yes
